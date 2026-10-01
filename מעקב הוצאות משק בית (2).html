@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>מעקב הוצאות משק בית</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--tx:#1d2330;--mut:#6b7385;--bd:#e2e5ec;--ac:#2563eb;--ok:#15803d;--bad:#b91c1c;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#10131a;--card:#1a1f2b;--tx:#e8ebf2;--mut:#98a1b5;--bd:#2b3242;--ac:#60a5fa;--ok:#4ade80;--bad:#f87171}}
+:root[data-theme="dark"]{--bg:#10131a;--card:#1a1f2b;--tx:#e8ebf2;--mut:#98a1b5;--bd:#2b3242;--ac:#60a5fa;--ok:#4ade80;--bad:#f87171}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;line-height:1.5}
+main{max-width:640px;margin:0 auto;padding:16px}
+h1{font-size:1.4rem;margin:4px 0 12px}
+h2{font-size:1rem;margin:0 0 10px;color:var(--mut)}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px;margin-bottom:14px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid var(--bd)}
+.row:last-child{border-bottom:0}
+.row label{flex:1}
+input{font:inherit;color:var(--tx);background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:8px;width:130px;text-align:left;direction:ltr}
+input.name{width:100%;text-align:right;direction:rtl}
+.sel{display:flex;gap:8px}.sel input{width:50%}
+.tot{display:flex;justify-content:space-between;font-weight:700;padding-top:10px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.k{background:var(--bg);border-radius:10px;padding:10px;text-align:center}
+.k small{display:block;color:var(--mut)}.k b{font-size:1.15rem}
+.ok{color:var(--ok)}.bad{color:var(--bad)}
+.btns{display:flex;gap:8px;flex-wrap:wrap}
+button{font:inherit;border:0;border-radius:10px;padding:12px 16px;cursor:pointer;background:var(--ac);color:#fff;flex:1}
+button.sec{background:var(--bg);color:var(--tx);border:1px solid var(--bd)}
+.cw{position:relative;height:300px;margin-bottom:16px}.cw.sm{height:220px}
+#ins{margin:0;padding-inline-start:20px}#ins li{margin-bottom:8px}
+#msg{color:var(--mut);font-size:.9rem;min-height:1.4em;margin-top:8px}
+</style>
+</head>
+<body>
+<main>
+<h1>🏠 מעקב הוצאות משק בית</h1>
+
+<div class="card">
+  <h2>חודש</h2>
+  <div class="sel"><input type="month" id="month"></div>
+</div>
+
+<div class="card">
+  <h2>הכנסות</h2>
+  <div class="row"><input class="name" id="n1" value="הכנסה שלי"><input type="number" inputmode="decimal" id="i1" placeholder="0"></div>
+  <div class="row"><input class="name" id="n2" value="הכנסת אשתי"><input type="number" inputmode="decimal" id="i2" placeholder="0"></div>
+  <div class="tot"><span>סה"כ הכנסות</span><span id="ti">0 ₪</span></div>
+</div>
+
+<div class="card">
+  <h2>הוצאות</h2>
+  <div id="exp"></div>
+  <div class="tot"><span>סה"כ הוצאות</span><span id="te">0 ₪</span></div>
+</div>
+
+<div class="card">
+  <h2>סיכום</h2>
+  <div class="grid">
+    <div class="k"><small>יתרה לחודש</small><b id="bal">0 ₪</b></div>
+    <div class="k"><small>% הוצאות מההכנסה</small><b id="pct">0%</b></div>
+  </div>
+</div>
+
+<div class="card" id="charts" style="display:none">
+  <h2>הוצאות לפי קטגוריה</h2>
+  <div class="cw"><canvas id="c1"></canvas></div>
+  <h2>הכנסות מול הוצאות</h2>
+  <div class="cw sm"><canvas id="c2"></canvas></div>
+  <div id="trendBox" style="display:none"><h2>מגמה לאורך חודשים</h2><div class="cw sm"><canvas id="c3"></canvas></div></div>
+  <h2>מסקנות</h2>
+  <ul id="ins"></ul>
+  <h2 style="margin-top:16px">💡 עצות לחיסכון לפי הנתונים שלכם</h2>
+  <ul id="adv"></ul>
+</div>
+
+<div class="btns">
+  <button id="xl">⬇️ ייצוא לאקסל</button>
+  <button class="sec" id="sh">📤 שיתוף קובץ</button>
+  <button class="sec" id="cp">📋 העתק כטקסט</button>
+  <button class="sec" id="clr">ניקוי חודש</button>
+</div>
+<textarea id="ta" rows="10" style="display:none;width:100%;margin-top:10px"></textarea>
+<div id="msg"></div>
+</main>
+
+<script>
+const CATS=["חשמל","מים","גז","ועד בית","ארנונה","אינטרנט וטלוויזיה","תמי 4","ביטוחי בריאות + דירה","קופת חולים","רכב","קניות לבית","בילויים","מתנות","בלת\"מ","חסכון חופשה","חסכון דירה","גן ילדים","שכר דירה","אישי","חסכון לילדה","רזרבה"];
+const ORDER=[17,0,1,2,3,4,5,6,7,8,9,10,11,12,13,16,18,14,15,19,20];
+const $=id=>document.getElementById(id);
+const fmt=n=>n.toLocaleString("he-IL",{maximumFractionDigits:2})+" ₪";
+const num=v=>parseFloat(v)||0;
+$("exp").innerHTML=ORDER.map(i=>`<div class="row"><label for="e${i}">${CATS[i]}</label><input type="number" inputmode="decimal" id="e${i}" placeholder="0"></div>`).join("");
+const ids=["i1","i2",...CATS.map((_,i)=>"e"+i)];
+const d=new Date();$("month").value=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0");
+
+function store(){try{return localStorage}catch(e){return null}}
+function key(){return "budget:"+$("month").value}
+function save(){const s=store();if(!s)return;try{
+  const o={n1:$("n1").value,n2:$("n2").value};ids.forEach(i=>o[i]=$(i).value);
+  s.setItem(key(),JSON.stringify(o));
+  s.setItem("budget:names",JSON.stringify({n1:$("n1").value,n2:$("n2").value}));}catch(e){}}
+function load(){ids.forEach(i=>$(i).value="");const s=store();if(!s)return;try{
+  const nm=JSON.parse(s.getItem("budget:names")||"null");if(nm){$("n1").value=nm.n1;$("n2").value=nm.n2}
+  const o=JSON.parse(s.getItem(key())||"null");if(o)ids.forEach(i=>{if(o[i]!=null)$(i).value=o[i]});}catch(e){}}
+function calc(){
+  const ti=num($("i1").value)+num($("i2").value);
+  const te=CATS.reduce((a,_,i)=>a+num($("e"+i).value),0);
+  const b=ti-te;
+  $("ti").textContent=fmt(ti);$("te").textContent=fmt(te);
+  $("bal").textContent=fmt(b);$("bal").className=b>=0?"ok":"bad";
+  $("pct").textContent=(ti?Math.round(te/ti*100):0)+"%";
+  try{draw(ti,te,b)}catch(e){}
+  return {ti,te,b};
+}
+const PAL=["#2563eb","#f59e0b","#10b981","#ef4444","#8b5cf6","#06b6d4","#ec4899","#84cc16","#f97316","#14b8a6","#6366f1","#eab308","#a855f7","#0ea5e9","#22c55e","#e11d48","#0d9488","#475569","#d946ef","#65a30d","#0284c7"];
+const ch={};
+const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+function mk(id,cfg){if(ch[id])ch[id].destroy();if(typeof Chart==="undefined")return;ch[id]=new Chart($(id),cfg)}
+function months(){const out=[],s=store();if(!s)return out;
+  try{for(let k=0;k<s.length;k++){const key=s.key(k),m=/^budget:(\d{4}-\d{2})$/.exec(key);if(!m)continue;
+    const o=JSON.parse(s.getItem(key)),vals=CATS.map((_,i)=>num(o["e"+i]));
+    out.push({m:m[1],inc:num(o.i1)+num(o.i2),vals,exp:vals.reduce((a,c)=>a+c,0)})}}catch(e){}
+  return out.sort((a,c)=>a.m<c.m?-1:1)}
+function draw(ti,te,b){
+  const has=ti>0||te>0;$("charts").style.display=has?"":"none";if(!has)return;
+  const tx=css("--tx"),mut=css("--mut"),bd=css("--bd"),card=css("--card");
+  const vals=CATS.map((_,i)=>num($("e"+i).value));
+  const ord=vals.map((_,i)=>i).filter(i=>vals[i]>0).sort((a,c)=>vals[c]-vals[a]);
+  const leg={position:"bottom",rtl:true,labels:{color:tx,boxWidth:12}};
+  const sc={x:{ticks:{color:mut},grid:{display:false}},y:{ticks:{color:mut},grid:{color:bd}}};
+  mk("c1",{type:"doughnut",data:{labels:ord.map(i=>CATS[i]),datasets:[{data:ord.map(i=>vals[i]),backgroundColor:ord.map(i=>PAL[i]),borderColor:card}]},
+    options:{maintainAspectRatio:false,animation:false,plugins:{legend:leg}}});
+  mk("c2",{type:"bar",data:{labels:["הכנסות","הוצאות","יתרה"],datasets:[{data:[ti,te,b],backgroundColor:["#2563eb","#f59e0b",b>=0?"#10b981":"#ef4444"]}]},
+    options:{maintainAspectRatio:false,animation:false,plugins:{legend:{display:false}},scales:sc}});
+  const ms=months(),cur=$("month").value;
+  $("trendBox").style.display=ms.length>=2?"":"none";
+  if(ms.length>=2)mk("c3",{type:"bar",data:{labels:ms.map(x=>x.m),datasets:[{label:"הכנסות",data:ms.map(x=>x.inc),backgroundColor:"#2563eb"},{label:"הוצאות",data:ms.map(x=>x.exp),backgroundColor:"#f59e0b"}]},
+    options:{maintainAspectRatio:false,animation:false,plugins:{legend:leg},scales:sc}});
+  const L=[],pc=(a,t)=>Math.round(a/t*100);
+  if(ti>0)L.push(b>=0?`נשארת יתרה של ${fmt(b)} (${pc(b,ti)}% מההכנסה).`:`⚠️ ההוצאות עולות על ההכנסות ב-${fmt(-b)}. כדאי לבדוק איפה אפשר לקצץ.`);
+  if(ord.length&&te>0)L.push(`ההוצאה הגדולה ביותר: ${CATS[ord[0]]} (${pc(vals[ord[0]],te)}% מההוצאות)`+(ord[1]!=null?`, אחריה ${CATS[ord[1]]} (${pc(vals[ord[1]],te)}%).`:"."));
+  const sav=vals[14]+vals[15]+vals[19]+vals[20];
+  if(ti>0&&sav>0){const p=pc(sav,ti);L.push(`חסכונות ורזרבה (חופשה, דירה, ילדה, רזרבה): ${fmt(sav)}, ${p}% מההכנסה${p<10?" – מתחת ל-10%, שכדאי לשאוף אליהם.":" – יפה."}`)}
+  const fx=vals.slice(0,6).reduce((a,c)=>a+c,0)+vals[17];
+  if(ti>0&&fx>0)L.push(`שכר דירה וחשבונות קבועים (חשמל, מים, גז, ועד, ארנונה, אינטרנט): ${pc(fx,ti)}% מההכנסה.`);
+  const fl=vals[11]+vals[12]+vals[13];
+  if(te>0&&fl>0)L.push(`בילויים, מתנות ובלת"מ: ${fmt(fl)} (${pc(fl,te)}% מההוצאות) – כאן קל לקצץ בחודש לחוץ.`);
+  const prev=ms.filter(x=>x.m<cur).pop();
+  if(prev&&prev.exp>0){const d=te-prev.exp;let big=0;vals.forEach((v,i)=>{if(Math.abs(v-prev.vals[i])>Math.abs(vals[big]-prev.vals[big]))big=i});
+    L.push(`לעומת ${prev.m}: ההוצאות ${d>=0?"עלו":"ירדו"} ב-${fmt(Math.abs(d))}. השינוי הבולט ביותר: ${CATS[big]} (${vals[big]-prev.vals[big]>=0?"+":"−"}${fmt(Math.abs(vals[big]-prev.vals[big]))}).`)}
+  $("ins").innerHTML=L.map(t=>`<li>${t}</li>`).join("");
+  const A=[],add=(t,s)=>A.push({t,s:s||0}),sh=v=>ti>0?pc(v,ti):0;
+  const flexAll=vals[11]+vals[12]+vals[13]+vals[18];
+  if(ti>0&&b<0)add(`⚠️ אתם בגירעון של ${fmt(-b)}. קודם כל לצמצם הוצאות גמישות (בילויים, מתנות, בלת"מ, אישי) ולדחות הפרשות לחסכון זמנית – עדיף מאשר להיכנס למינוס.`,-b);
+  if(vals[17]>0&&ti>0&&sh(vals[17])>35)add(`שכר הדירה הוא ${sh(vals[17])}% מההכנסה – מעל 30–35% המומלצים. בחידוש החוזה כדאי להתמקח, או לבדוק דירה זולה יותר.`,vals[17]*0.05);
+  if(vals[7]>0)add(`ביטוחי בריאות ודירה (${fmt(vals[7])}): להשוות הצעות ולבדוק כפל כיסויים עם קופת החולים – בדרך כלל חוסכים 10–20%.`,vals[7]*0.15);
+  if(vals[9]>0&&sh(vals[9])>8)add(`הרכב עולה ${fmt(vals[9])} (${sh(vals[9])}% מההכנסה). להשוות ביטוח בכל חידוש, לבדוק דלק ותחזוקה, ולשקול אם נחוץ רכב שני.`,vals[9]*0.1);
+  if(vals[10]>0&&sh(vals[10])>12)add(`קניות לבית (${fmt(vals[10])}, ${sh(vals[10])}% מההכנסה): לקנות לפי רשימה, להשוות בין רשתות ולצמצם בזבוז מזון.`,vals[10]*0.1);
+  if(vals[5]>0)add(`אינטרנט וטלוויזיה (${fmt(vals[5])}): לדרוש מהחברה מחיר חדש או לעבור ספק – ההנחות מגיעות בעיקר למי שמבקש.`,vals[5]*0.2);
+  if(vals[0]>0)add(`חשמל (${fmt(vals[0])}): להפעיל מכשירים גדולים בשעות שפל ולנתק מכשירים במצב המתנה.`,vals[0]*0.1);
+  if(vals[4]>0)add(`ארנונה (${fmt(vals[4])}): לבדוק זכאות להנחות לפי הרכב המשפחה וההכנסה.`);
+  if(vals[16]>0)add(`גן ילדים (${fmt(vals[16])}): לבדוק זכאות לסבסוד ולנקודות זיכוי במס להורים לילדים קטנים.`);
+  if(flexAll>0&&ti>0&&sh(flexAll)>12)add(`הוצאות גמישות (בילויים, מתנות, בלת"מ, אישי): ${fmt(flexAll)} (${sh(flexAll)}% מההכנסה). לקבוע תקרה חודשית לכל קטגוריה ולהפריש מראש לבלת"מ.`,flexAll*0.15);
+  if(ti>0){const sr=pc(sav,ti);
+    if(sr<10)add(`אחוז החיסכון שלכם ${sr}% – כדאי להגיע ל-10% לפחות. הוראת קבע ביום המשכורת עובדת טוב יותר מלחסוך את מה שנשאר.`);
+    else if(sr<20)add(`אחוז החיסכון ${sr}% – טוב. כדי להגיע ל-20% חסרים לכם כ-${fmt(ti*0.2-sav)} בחודש.`);
+    else add(`אחוז החיסכון ${sr}% – מצוין! כדאי לבדוק איפה הכסף החסוך עובד (ריבית, תשואה).`);
+    if(vals[20]===0)add(`אין הפרשה לרזרבה החודש. יעד מקובל: 3–6 חודשי הוצאות כרית ביטחון.`);}
+  A.sort((x,y)=>y.s-x.s);
+  const tot=A.filter(x=>x.s>0&&x.t.indexOf("גירעון")<0).reduce((a,x)=>a+x.s,0);
+  $("adv").innerHTML=A.slice(0,7).map(x=>`<li>${x.t}</li>`).join("")+(tot>0?`<li><b>פוטנציאל חיסכון משוער אם תיישמו את העצות: כ-${fmt(Math.round(tot))} בחודש (כ-${fmt(Math.round(tot*12))} בשנה).</b></li>`:"");
+}
+try{matchMedia("(prefers-color-scheme: dark)").addEventListener("change",()=>calc())}catch(e){}
+document.addEventListener("input",()=>{save();calc()});
+$("month").addEventListener("change",()=>{load();calc()});
+$("clr").onclick=()=>{ids.forEach(i=>$(i).value="");calc();save();$("msg").textContent="החודש נוקה."};
+
+function getRows(){
+  const {ti,te,b}=calc();
+  return [["מעקב הוצאות משק בית","חודש: "+$("month").value],[],["הכנסות","סכום (₪)"],
+    [$("n1").value,num($("i1").value)],[$("n2").value,num($("i2").value)],["סה\"כ הכנסות",ti],[],
+    ["הוצאות","סכום (₪)"],...ORDER.map(i=>[CATS[i],num($("e"+i).value)]),["סה\"כ הוצאות",te],[],
+    ["יתרה לחודש",b],["% הוצאות מההכנסה",ti?Math.round(te/ti*1000)/10+"%":"0%"]];
+}
+const msg=t=>{$("msg").textContent=t};
+$("cp").onclick=async()=>{
+  const txt=getRows().map(r=>r.join(": ")).join("\n");
+  try{await navigator.clipboard.writeText(txt);msg("הועתק ✔ אפשר להדביק בוואטסאפ או בהערות.");$("ta").style.display="none";return}catch(e){}
+  $("ta").value=txt;$("ta").style.display="block";$("ta").focus();$("ta").select();msg("לחצו והעתיקו את הטקסט מהתיבה.");
+};
+$("xl").onclick=async()=>{
+  const rows=getRows();
+  msg("מכין קובץ…");
+  const fname="budget-"+$("month").value+".xlsx";
+  let buf;
+  try{
+    const ws=XLSX.utils.aoa_to_sheet(rows);ws["!cols"]=[{wch:28},{wch:16}];
+    const wb=XLSX.utils.book_new();wb.Workbook={Views:[{RTL:true}]};
+    XLSX.utils.book_append_sheet(wb,ws,$("month").value||"month");
+    buf=XLSX.write(wb,{bookType:"xlsx",type:"array"});
+  }catch(e){msg("שגיאה ביצירת הקובץ: "+((e&&e.message)||e));return}
+  let dl=null;
+  try{
+    dl=(typeof claude!=="undefined"&&claude.use)?await claude.use("downloads"):null;
+    if(dl){const r=await dl.save({filename:fname,data:buf.slice(0)});msg("הקובץ נשלח לשמירה ("+r.status+"). אם לא הופיע בהורדות, נסו את 'שיתוף קובץ' או 'העתק כטקסט'.");return}
+  }catch(e){if(e&&e.code==="declined"){msg("השמירה בוטלה.");return}msg("הורדה ישירה נכשלה ("+((e&&(e.code||e.message))||e)+"). נסו 'שיתוף קובץ' או 'העתק כטקסט'.")}
+  if(!dl)msg("הורדה ישירה לא זמינה כאן. נסו 'שיתוף קובץ' או 'העתק כטקסט'.");
+};
+$("sh").onclick=async()=>{
+  try{
+    const rows=getRows();const ws=XLSX.utils.aoa_to_sheet(rows);const wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,$("month").value||"month");
+    const buf=XLSX.write(wb,{bookType:"xlsx",type:"array"});
+    const f=new File([buf],"budget-"+$("month").value+".xlsx",{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+    if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f]});msg("נשלח ✔");}
+    else msg("שיתוף קבצים לא נתמך כאן. נסו 'העתק כטקסט'.");
+  }catch(e){msg(e&&e.name==="AbortError"?"השיתוף בוטל.":"שיתוף נכשל: "+((e&&e.message)||e))}
+};
+load();calc();
+</script>
+</body>
+</html>
